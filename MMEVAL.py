@@ -57,8 +57,17 @@ def readPDB(pdb_dir):
     chains = list(residue_dict.keys())
     return model,chains, residue_dict
 
+def convert_string(s):
+    # 알파벳 매핑: A는 0, B는 1, ..., Z는 23로 매핑
+    mapping = {chr(i + 65): i for i in range(24)}
+    
+    # 입력 문자열을 매핑된 숫자로 변환
+    result = ''.join(str(mapping[char]) for char in s)
+    
+    return result
+    
 
-def get_contact(pdb_path, residue_dict = None,coord_masks = None, show = True):
+def get_contact(pdb_path, residue_dict = None,coord_masks = None, interface = 'all', show = True):
     
     def get_coordinates(residue_length, model, residue_dict, residue_intervals):
         coord = np.zeros([residue_length,37, 3])
@@ -94,16 +103,32 @@ def get_contact(pdb_path, residue_dict = None,coord_masks = None, show = True):
     
     residue_length = 0
     residue_intervals = []    
-    
+
     for chain in residue_dict.keys():
         residue_intervals.append(np.array(list(residue_dict[chain].keys())).max())
         residue_length += np.array(list(residue_dict[chain].keys())).max()
         
     contact_map = np.zeros([residue_length,residue_length])
     start_point = 0
+    start_points = [0]
+    
     for residue_interval in residue_intervals:
         contact_map[start_point:start_point + residue_interval,start_point:start_point + residue_interval] = np.nan
         start_point += residue_interval
+        start_points.append(start_point)
+    
+    if interface != 'all':
+        contact_map[:] = np.nan
+        i_chains, j_chains = interface.split(':')
+        i_chains, j_chains = i_chains.upper(), j_chains.upper()
+        i_chain_nums, j_chain_nums = convert_string(i_chains), convert_string(j_chains)
+
+        for i in range(len(i_chain_nums)):
+            i_chain_num = int(i_chain_nums[i])
+            j_chain_num = int(j_chain_nums[i])
+            contact_map[start_points[i_chain_num]:start_points[i_chain_num] + residue_intervals[i_chain_num],start_points[j_chain_num]:start_points[j_chain_num] + residue_intervals[j_chain_num]] = 0
+            contact_map[start_points[j_chain_num]:start_points[j_chain_num] + residue_intervals[j_chain_num],start_points[i_chain_num]:start_points[i_chain_num] + residue_intervals[i_chain_num]] = 0
+
 
     coords, temp_coord_masks = get_coordinates(residue_length, model, residue_dict, residue_intervals)
     if coord_masks is None: coord_masks = temp_coord_masks
@@ -172,11 +197,10 @@ def get_IPS(native_contact_map, pred_contact_map):
     return interface_patch_similarity
 
 
-
-def eval_interface(native_pdb_path, pred_pdb_path,show = False):
+def eval_interface(native_pdb_path, pred_pdb_path,show = False, interface = 'all', print = False):
     
-    native_contact_map, residue_dict, coord_masks = get_contact(native_pdb_path, residue_dict = None, coord_masks = None, show = show)
-    pred_contact_map, _, _ = get_contact(pred_pdb_path, residue_dict = residue_dict, coord_masks = coord_masks, show = show)
+    native_contact_map, residue_dict, coord_masks = get_contact(native_pdb_path, residue_dict = None, coord_masks = None, interface = interface, show = show)
+    pred_contact_map, _, _ = get_contact(pred_pdb_path, residue_dict = residue_dict, coord_masks = coord_masks, interface = interface, show = show)
     
     #print(np.isnan(native_contact_map).sum(), np.isnan(pred_contact_map).sum())
     ICS = get_ICS(native_contact_map, pred_contact_map)
@@ -184,6 +208,7 @@ def eval_interface(native_pdb_path, pred_pdb_path,show = False):
     
     if np.isnan(ICS) : ICS = 0
     if np.isnan(IPS) : IPS = 0
-    
-    print(F'Interface Similarity Score : {ICS:.5f}, Interface Patch Score : {IPS:.5f}')
+
+    if print == True:
+        print(F'Interface Similarity Score : {ICS:.5f}, Interface Patch Score : {IPS:.5f}')
     return ICS, IPS
