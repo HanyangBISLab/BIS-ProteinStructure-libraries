@@ -9,11 +9,14 @@ from Bio.PDB.MMCIFParser import MMCIFParser
 from Bio.PDB import PDBParser
 from Bio.PDB.DSSP import DSSP
 from Bio.PDB import PDBIO
+from Bio.PDB import Structure, Model, Chain, Residue, Atom
+from Bio.PDB.SASA import ShrakeRupley
 from DSSPparser import parseDSSP
+
 
 import concurrent.futures
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
 TMscore_path = './TMscore'
 
@@ -138,6 +141,7 @@ def create_structure_from_feature(sequence, all_atom_positions, all_atom_mask, s
 
     return structure
 
+
 def get_binned_solvents_for_input_feature(SA_root, feature, protein_name, save = False):
     
     thres = np.linspace(0,1,11)[:-1]    
@@ -176,7 +180,8 @@ def get_binned_solvents_for_input_feature(SA_root, feature, protein_name, save =
                     
                     real_solvents[resnum] = residue.sasa
                     RSA = np.min([1, (residue.sasa / SA_maximum_map[restype])])
-                    binned_solvents[resnum, (RSA>=thres).sum() -1] = True
+                    binned_solvents[resnum, (RSA>=thres).sum()-1] = True
+                    binned_solvents[resnum, 0] = False
                     solvents_mask[resnum] = True
                     
     solvents = {}
@@ -228,8 +233,9 @@ def get_binned_solvents_for_casp_target(SA_root, dssp_file_path, residue_length,
         else : restype = 'XAA'
 
         RSA = np.min([1,int(solvents[i]) / SA_maximum_map[restype] ])
-        binned_solvents[k, (RSA>=thres).sum() -1] = True
-        real_solvents[k] = RSA
+        binned_solvents[k, (RSA>=thres).sum()-1] = True
+        binned_solvents[k, 0] = False
+        real_solvents[k] = int(solvents[i])
         solvents_mask[k] = True
 
         i+=1
@@ -264,7 +270,9 @@ def get_binned_solvents_for_netsurfp(SA_root,  netsurfp_SA_path, residue_length,
     for resnum in range(residue_length):
         if resnum >= residue_length: continue
         RSA = netsurfp_SA[resnum].sum()
-        binned_solvents[resnum, (RSA>=thres).sum() -1] = True
+        binned_solvents[resnum, (RSA>=thres).sum()-1] = True
+        binned_solvents[resnum, 0] = False
+        
         real_solvents[resnum] = RSA
         solvents_mask[resnum] = True
         
@@ -318,3 +326,4 @@ def DSSP_to_SA_parerall(former_features, former_feature_root, binned_SA_root, af
             candidate, exception = future.result()
             if exception is not None:
                 print(candidate, exception)
+                
