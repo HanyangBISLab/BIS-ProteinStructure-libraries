@@ -4,8 +4,12 @@ from Bio.PDB.PDBParser import PDBParser
 import numpy as np
 import torch
 import pickle
+import sys
 from math import pi
 from scipy.spatial.distance import pdist, squareform
+
+sys.path.append('/gpfs/deepfold/users/casp/alphafold/')
+import alphafold
 
 plot_types = {'PHI_PSI' : [1,2], 'PHI_CHI1' : [1,3], 'PSI_CHI1' : [2,3], 'CHI1_CHI2' : [3, 4]}
     
@@ -140,6 +144,19 @@ tor_types = {'OMEGA' : 0, 'PHI' : 1, 'PSI' : 2, 'CHI1' : 3, 'CHI2' : 4 , 'CHI3' 
 res_map = {'ALA' : 'A', 'ARG' : 'R', 'ASN' : 'N', 'ASP' : 'D', 'CYS' : 'C', 'GLN' : 'Q', 'GLU' : 'E', 'GLY' : 'G', 'HIS' : 'H', 'ILE' : 'I', 'LEU' : 'L', \
            'LYS' : 'K', 'MET' : 'M', 'PHE' : 'F', 'PRO' : 'P', 'SER' : 'S', 'THR' : 'T', 'TRP' : 'W', 'TYR' : 'Y', 'VAL' : 'V', 'UNK' : '-'}
 
+def readPDB(pdb_path):
+    parser = PDBParser(PERMISSIVE=1)
+    structure = parser.get_structure('pdb', pdb_path)
+    residues = {}
+    for model_id in structure:
+        for chain_id in model_id:
+            chain = model_id[chain_id.id]
+            for residue in chain_id:
+                res_name = residue.resname.strip()
+                res_id = residue.id[1]
+                residues[res_id] = res_name
+    return residues, chain  
+
 def get_coordinates(final_residue, residues,chain):
     first_residue = list(residues.keys())[0]
     coord = np.zeros([final_residue,37, 3])
@@ -225,7 +242,7 @@ def get_interacted_torsion(atom_mask, atom_pos, residues, as_tensor = False, ang
     
     if angle == 'omega' or angle == 'phi' or angle == 'psi': n_angle = 1
     
-    tor_masks = np.zeros([len(atom_mask),len(atom_mask),n_angle], dtype = np.bool)
+    tor_masks = np.zeros([len(atom_mask),len(atom_mask),n_angle], dtype = np.bool_)
     tor_angles = np.zeros([len(atom_mask),len(atom_mask),n_angle])
     
     start_num = list(residues.keys())[0]
@@ -272,7 +289,7 @@ def get_interacted_torsion(atom_mask, atom_pos, residues, as_tensor = False, ang
     return tor_masks, tor_angles
   
 def get_torsion(atom_mask, atom_pos, residues, as_tensor = False):
-    tor_masks = np.zeros([len(atom_mask),7], dtype = np.bool)
+    tor_masks = np.zeros([len(atom_mask),7], dtype = np.bool_)
     tor_angles = np.zeros([len(atom_mask),7])
     
     start_num = list(residues.keys())[0]
@@ -323,9 +340,9 @@ def get_torsion(atom_mask, atom_pos, residues, as_tensor = False):
 
   
 def get_torsion_with_interacted(atom_mask, atom_pos, residues, interacted, as_tensor = False):
-    tor_masks = np.zeros([len(atom_mask),7], dtype = np.bool)
+    tor_masks = np.zeros([len(atom_mask),7], dtype = np.bool_)
     tor_angles = np.zeros([len(atom_mask),7])
-    interacted_masks = np.zeros([len(atom_mask), 3], dtype = np.bool)
+    interacted_masks = np.zeros([len(atom_mask), 3], dtype = np.bool_)
     interacted_angles = np.zeros([len(atom_mask), 3])
     
     start_num = list(residues.keys())[0]
@@ -371,7 +388,6 @@ def get_torsion_with_interacted(atom_mask, atom_pos, residues, interacted, as_te
                 
                 
         if res_num not in interacted.keys(): continue
-        
         
         
         if residues[interacted[res_num]] == 'GLY'  or residues[res_num] == 'GLY':
@@ -439,7 +455,7 @@ def sidechain_sym_angle_under_0(residues,tor_masks, tor_angles):
 
   
 def get_sidechain_coord_diff(atom_mask, atom_pos, residues, as_tensor = False):
-    sidechain_masks = np.zeros([len(atom_mask),4], dtype = np.bool)
+    sidechain_masks = np.zeros([len(atom_mask),4], dtype = np.bool_)
     sidechain_dists = np.zeros([len(atom_mask),4,3])
     sidechain_alter_dists = np.zeros([len(atom_mask),4,3])
     
@@ -476,35 +492,8 @@ def get_sidechain_coord_diff(atom_mask, atom_pos, residues, as_tensor = False):
         sidechain_masks = torch.tensor(sidechain_masks)
         sidechain_dists = torch.tensor(sidechain_dists)
         sidechain_alter_dists = torch.tensor(sidechain_dists)
-    return sidechain_masks, sidechain_dists, sidechain_alter_dists  
+    return sidechain_masks, sidechain_dists, sidechain_alter_dists           
 
-def readPDB(pdb_dir):
-    parser = PDBParser(PERMISSIVE=1)
-    structure = parser.get_structure('pdb', pdb_dir)
-    residues = {}
-    for model_id in structure:
-        for chain_id in model_id:
-            chain = model_id[chain_id.id]
-            for residue in chain_id:
-                res_name = residue.resname.strip()
-                res_id = residue.id[1]
-                residues[res_id] = res_name
-    return residues, chain           
-
-def readPDB_ver2(pdb_dir):
-    parser = PDBParser(PERMISSIVE=1)
-    structure = parser.get_structure('pdb', pdb_dir)
-    residues = {}
-    chains = {}
-    for model_id in structure:
-        for chain_id in model_id:
-            residues = {}
-            for residue in chain_id:
-                res_name = residue.resname.strip()
-                res_id = residue.id[1]
-                residues[res_id] = res_name
-            chains[chain_id] = residues
-    return chains
 
 def getTorsion_acc(target_residues, tor_masks, native_angles, target_angles, target_alter_angles, thres = 10, chi_dependent = True):
     
@@ -762,3 +751,30 @@ def get_pkl_to_pdb_torsion_loss(pkl_path, target_path, loss_type = 'square'):
     Loss = torsion_angle_each_loss(target_tor_sincos, pkl_tor_sincos[:final_residue],target_tor_masks, loss_type =loss_type, chi_dependent = False)
     
     return Loss
+
+def pkl_to_pdb_torsion_loss(pkl_path, pdb_path,loss_type = 'square', chi_dependent = False, thres = 10): 
+    target_residues, target_chain = readPDB(pdb_path)
+    final_residue = list(target_residues)[-1]
+
+    target_coords, target_coords_mask, _ = get_coordinates(final_residue, target_residues, target_chain)
+    target_tor_masks, target_tor_angles  = get_torsion(target_coords_mask, target_coords, target_residues, as_tensor = True)
+
+    #target_tor_masks = torch.logical_and(tor_masks[:final_residue], target_tor_masks)
+    target_tor_alter_angles = torch.where(target_tor_masks,target_tor_angles+180,target_tor_angles)
+    target_tor_alter_angles = torch.where(target_tor_alter_angles>180,target_tor_alter_angles-360 ,target_tor_alter_angles)
+
+    #af_tor_angles = np.load(pkl_path, allow_pickle = True)['structure_module']['sidechains']['angles_sin_cos'][7]
+    with open(pkl_path, 'rb') as f: af_tor_angles = pickle.load(f)['structure_module']['sidechains']['angles_sin_cos'][7]
+    af_tor_angles = torch.tensor(np.arctan2(af_tor_angles[:,:,0], af_tor_angles[:,:,1]) * 180 / np.pi ) 
+    af_tor_masks  = target_tor_masks
+    af_tor_sincos = angles_to_sincos(af_tor_angles)
+
+    target_tor_angles = sidechain_sym_angle(target_residues, target_tor_masks[:final_residue], af_tor_angles[:final_residue], \
+                                                     target_tor_angles[:final_residue], target_tor_alter_angles[:final_residue])
+    target_tor_sincos = angles_to_sincos(target_tor_angles)
+    
+    
+    acc = getTorsion_acc(target_residues, target_tor_masks, af_tor_angles[:final_residue], target_tor_angles, target_tor_alter_angles, thres)
+    loss = torsion_angle_each_loss(target_tor_sincos, af_tor_sincos[:final_residue],target_tor_masks, loss_type, chi_dependent)
+    
+    return acc,loss
