@@ -373,6 +373,7 @@ def get_torsion_with_interacted(atom_mask, atom_pos, residues, interacted, as_te
         if res_num not in interacted.keys(): continue
         
         
+        
         if residues[interacted[res_num]] == 'GLY'  or residues[res_num] == 'GLY':
             interacted_masks[i][0]  = False
             interacted_masks[i][1]  = False
@@ -490,6 +491,20 @@ def readPDB(pdb_dir):
                 residues[res_id] = res_name
     return residues, chain           
 
+def readPDB_ver2(pdb_dir):
+    parser = PDBParser(PERMISSIVE=1)
+    structure = parser.get_structure('pdb', pdb_dir)
+    residues = {}
+    chains = {}
+    for model_id in structure:
+        for chain_id in model_id:
+            residues = {}
+            for residue in chain_id:
+                res_name = residue.resname.strip()
+                res_id = residue.id[1]
+                residues[res_id] = res_name
+            chains[chain_id] = residues
+    return chains
 
 def getTorsion_acc(target_residues, tor_masks, native_angles, target_angles, target_alter_angles, thres = 10, chi_dependent = True):
     
