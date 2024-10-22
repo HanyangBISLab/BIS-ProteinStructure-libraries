@@ -10,7 +10,6 @@ from scipy.interpolate import CubicSpline
 from scipy.spatial.distance import pdist, squareform
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
-import tensorflow as tf
 import pickle
 import torch
 
