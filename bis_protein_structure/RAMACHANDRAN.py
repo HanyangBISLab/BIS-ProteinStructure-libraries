@@ -1,4 +1,4 @@
-import Modules.TORSION2 as TORSION2
+import bis_protein_structure.TORSION2 as TORSION2
 from Bio.PDB.PDBParser import PDBParser
 from tqdm import tqdm
 import numpy as np
