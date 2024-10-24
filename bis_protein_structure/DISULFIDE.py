@@ -1,39 +1,33 @@
-from Bio.PDB.MMCIFParser import MMCIFParser
-from Bio.PDB.MMCIF2Dict import MMCIF2Dict
-from Bio.PDB import PDBParser
-from Bio.PDB import PDBIO
-
-import gzip
-import os
-import shutil
-import zipfile
-import pickle
-import csv
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import numpy as np
-
-import random
-
-import concurrent.futures
-import subprocess
-
-from tqdm import tqdm
-
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from argparse import ArgumentParser
-
-from scipy.spatial.distance import pdist, squareform
-
-import residue_constants as residue_constants
-
-
-res_types = {'ALA' : 'A', 'ARG' : 'R', 'ASN' : 'N', 'ASP' : 'D', 'CYS' : 'C', 'GLN' : 'Q', 'GLU' : 'E', 'GLY' : 'G', 'HIS' : 'H', 'ILE' : 'I', 'LEU' : 'L', \
-           'LYS' : 'K', 'MET' : 'M', 'PHE' : 'F', 'PRO' : 'P', 'SER' : 'S', 'THR' : 'T', 'TRP' : 'W', 'TYR' : 'Y', 'VAL' : 'V', 'UNK' : '-'}
-
-
 def readMMCIF_label(mmcif_path):
+    """
+    Reads an MMCIF file and extracts chain and residue information.
+
+    Parameters
+    ----------
+    mmcif_path : str
+        Path to the MMCIF file.
+
+    Returns
+    -------
+    model : Bio.PDB.Model
+        The first model from the parsed structure.
+    chains : list of str
+        List of chain IDs present in the structure.
+    residue_dict : dict
+        Dictionary mapping each chain to a dictionary of residue numbers and residue names.
+        Format: {chain_id: {res_num: res_name}}.
+    residue_idx_edit : dict
+        Dictionary that maps chain IDs to dictionaries which map residue numbers to indices
+        based on their sequence order.
+        Format: {chain_id: {res_num: index}}.
+
+    Notes
+    -----
+    The function parses the MMCIF file, extracts chain and residue information, and then aligns
+    the residue numbering with the label sequence identifiers provided in the MMCIF file. Only 
+    standard amino acids are included, and the sequence numbering is adjusted to fit a zero-based
+    index for further processing.
+    """
     parser = MMCIFParser(auth_residues=False, QUIET=True)
     structure = parser.get_structure("structure", mmcif_path)
     residue_dict = {}    
@@ -77,8 +71,42 @@ def readMMCIF_label(mmcif_path):
     return model, chains, residue_dict, residue_idx_edit
 
 
-
 def get_SS_ver5(chain_id, chain, res_length, residue_idx_edit, criteria):
+    """
+    Extracts the spatial coordinates of the alpha carbon (CA) or sulfur gamma (SG) atoms of residues 
+    in a protein chain and computes pairwise distances.
+
+    Parameters
+    ----------
+    chain_id : str
+        Chain ID to process.
+    chain : Bio.PDB.Chain
+        The chain object containing residues to process.
+    res_length : int
+        The total number of residues in the chain.
+    residue_idx_edit : dict
+        A dictionary mapping residue numbers to indices for the chain.
+    criteria : str
+        The atom type to use for distance calculations. Valid options are 'CA' (alpha carbon) 
+        and 'SG' (sulfur gamma).
+
+    Returns
+    -------
+    filter_disto : numpy.ndarray
+        A filtered distogram (distance matrix) that contains distances between Cysteine residues
+        that meet the distance criteria. The shape is (res_length, res_length, 1).
+    pair_list : numpy.ndarray
+        List of residue index pairs where the distance between Cysteine residues satisfies the 
+        specified distance criteria.
+
+    Notes
+    -----
+    - The function computes the pairwise Euclidean distance between alpha carbons (CA) or sulfur
+      gamma atoms (SG) in the given chain.
+    - For the 'CA' criteria, the distance threshold is set between 3.0 and 7.5 Å, while for 'SG' 
+      criteria, it is set between 2.0 and 3.0 Å.
+    - Only Cysteine residues are considered for the distance calculation in the case of 'SG' criteria.
+    """
     residue_length = int(res_length)
     
     calpha_coords = np.zeros([residue_length,3])
@@ -99,7 +127,6 @@ def get_SS_ver5(chain_id, chain, res_length, residue_idx_edit, criteria):
         
         # For circulation
         if res_name in res_types.keys():
-#             print(res_name)
             # for distogram
             if "CA" in residue:
                 calpha_coords[res_num] = residue["CA"].get_coord()
@@ -145,5 +172,4 @@ def get_SS_ver5(chain_id, chain, res_length, residue_idx_edit, criteria):
             
     pair_list = np.array(pair_list)
         
-    
     return filter_disto, pair_list
